@@ -28,6 +28,7 @@ final _devProfile = _readDevProfile();
 final _localAuthCallbackPort = _readLocalAuthCallbackPort(_devProfile);
 final _localAuthRedirectUri =
     'http://localhost:$_localAuthCallbackPort/auth/callback';
+final _enableDesktopDeepLinks = _devProfile == 'default';
 
 String _readDevProfile() {
   final runtimeProfile = Platform.environment['WT_PROFILE'];
@@ -69,7 +70,9 @@ Future<void> main() async {
     localStorage: ProfiledLocalStorage(_devProfile),
     pkceAsyncStorage: ProfiledGotrueAsyncStorage(_devProfile),
   );
-  await registerAppProtocol('walkie-talkie');
+  if (_enableDesktopDeepLinks) {
+    await registerAppProtocol('walkie-talkie');
+  }
 
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
@@ -502,7 +505,9 @@ class AuthController extends ChangeNotifier {
   void start() {
     user = _client.auth.currentUser;
     authMessage = user == null ? authMessage : 'Signed in as ${user!.email}';
-    _listenForDeepLinks();
+    if (_enableDesktopDeepLinks) {
+      _listenForDeepLinks();
+    }
     _authSubscription = _client.auth.onAuthStateChange.listen((data) {
       user = data.session?.user;
       signingIn = false;
@@ -592,7 +597,7 @@ class AuthController extends ChangeNotifier {
       final callbackUri = Uri(
         scheme: 'http',
         host: 'localhost',
-        port: 3000,
+        port: _localAuthCallbackPort,
         path: request.uri.path,
         query: request.uri.query,
         fragment: request.uri.fragment,

@@ -122,6 +122,11 @@ separately for each profile, so account A and account B can stay signed in at
 the same time. Profile A uses OAuth callback port `3000`, profile B uses
 `3001`, profile C uses `3002`.
 
+For named test profiles like `A` and `B`, the app uses only the localhost OAuth
+callback and does not handle the `walkie-talkie://` deep link. If the browser
+opens an already-running app during login, check that Supabase is allowing the
+matching localhost redirect URL for that profile.
+
 For Windows PowerShell:
 
 ```powershell
