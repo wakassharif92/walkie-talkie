@@ -97,6 +97,32 @@ pokes
 
 and RPC functions for atomic request approval, friend deletion, group admin actions, and poke clearing. Re-run the SQL after pulling app changes that touch Supabase tables or policies.
 
+## Testing Two Accounts On One Computer
+
+By default, two copies of the desktop app share the same saved Supabase login.
+For local testing, run each copy with a different `WT_PROFILE` value:
+
+```sh
+WT_PROFILE=A flutter run -d macos
+```
+
+Then open a second terminal and run:
+
+```sh
+WT_PROFILE=B flutter run -d macos
+```
+
+Log in to a different Google account in each app. The app stores Supabase auth
+separately for each profile, so account A and account B can stay signed in at
+the same time.
+
+For Windows PowerShell:
+
+```powershell
+$env:WT_PROFILE="A"; flutter run -d windows
+$env:WT_PROFILE="B"; flutter run -d windows
+```
+
 ## Windows Runner Notes
 
 No C++ runner changes are required for the current implementation. The Flutter app uses `window_manager` to intercept close events and hide to the system tray instead of exiting.
