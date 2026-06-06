@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -20,44 +19,11 @@ const _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
     'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a3doeXVzaHhlcGZncHV2Ym55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NDIxNTcsImV4cCI6MjA5NjMxODE1N30.'
     'IoMfLh8AVWE_CQixqFXkwN4JsyNmduWLo7k_OpFC4YY';
 const _authRedirectUri = 'walkie-talkie://login-callback';
+const _localAuthCallbackPort = 3000;
+const _localAuthRedirectUri = 'http://localhost:3000/auth/callback';
 const _sampleRate = 24000;
 const _channels = 1;
 const _bitsPerSample = 16;
-
-final _devProfile = _readDevProfile();
-final _localAuthCallbackPort = _readLocalAuthCallbackPort(_devProfile);
-final _localAuthRedirectUri =
-    'http://localhost:$_localAuthCallbackPort/auth/callback';
-final _enableDesktopDeepLinks = _devProfile == 'default';
-
-String _readDevProfile() {
-  final runtimeProfile = Platform.environment['WT_PROFILE'];
-  if (runtimeProfile != null && runtimeProfile.trim().isNotEmpty) {
-    return runtimeProfile.trim();
-  }
-  return const String.fromEnvironment(
-    'WT_PROFILE',
-    defaultValue: 'default',
-  );
-}
-
-int _readLocalAuthCallbackPort(String profile) {
-  final explicitPort = int.tryParse(
-    Platform.environment['WT_AUTH_PORT'] ??
-        const String.fromEnvironment('WT_AUTH_PORT'),
-  );
-  if (explicitPort != null) return explicitPort;
-
-  final normalizedProfile = profile.trim().toUpperCase();
-  if (normalizedProfile.length == 1) {
-    final code = normalizedProfile.codeUnitAt(0);
-    if (code >= 65 && code <= 90) {
-      return 3000 + code - 65;
-    }
-  }
-  if (normalizedProfile == 'DEFAULT') return 3000;
-  return 3000 + profile.hashCode.abs() % 100;
-}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,12 +33,8 @@ Future<void> main() async {
     anonKey: _supabaseAnonKey,
     authFlowType: AuthFlowType.pkce,
     authCallbackUrlHostname: 'login-callback',
-    localStorage: ProfiledLocalStorage(_devProfile),
-    pkceAsyncStorage: ProfiledGotrueAsyncStorage(_devProfile),
   );
-  if (_enableDesktopDeepLinks) {
-    await registerAppProtocol('walkie-talkie');
-  }
+  await registerAppProtocol('walkie-talkie');
 
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
@@ -96,122 +58,6 @@ Future<void> main() async {
 }
 
 enum TalkState { idle, requesting, transmitting, busy, disconnected }
-
-class ProfiledLocalStorage extends LocalStorage {
-  factory ProfiledLocalStorage(String profile) {
-    final storage = _ProfiledFileStore(profile);
-    return ProfiledLocalStorage._(storage);
-  }
-
-  ProfiledLocalStorage._(_ProfiledFileStore storage)
-      : super(
-          initialize: storage.initialize,
-          hasAccessToken: storage.hasAccessToken,
-          accessToken: storage.accessToken,
-          persistSession: storage.persistSession,
-          removePersistedSession: storage.removePersistedSession,
-        );
-}
-
-class ProfiledGotrueAsyncStorage extends GotrueAsyncStorage {
-  ProfiledGotrueAsyncStorage(String profile)
-      : _storage = _ProfiledFileStore(profile, namespace: 'pkce');
-
-  final _ProfiledFileStore _storage;
-
-  @override
-  Future<String?> getItem({required String key}) {
-    return _storage.readValue(key);
-  }
-
-  @override
-  Future<void> removeItem({required String key}) {
-    return _storage.removeValue(key);
-  }
-
-  @override
-  Future<void> setItem({required String key, required String value}) {
-    return _storage.writeValue(key, value);
-  }
-}
-
-class _ProfiledFileStore {
-  _ProfiledFileStore(this.profile, {this.namespace = 'auth'});
-
-  static const _sessionKey = 'supabase-session';
-
-  final String profile;
-  final String namespace;
-
-  Directory get _directory {
-    final safeProfile = _safeFileName(profile.isEmpty ? 'default' : profile);
-    final basePath = _appSupportPath();
-    return Directory('$basePath/dev_profiles/$safeProfile/$namespace');
-  }
-
-  File _fileForKey(String key) {
-    return File('${_directory.path}/${_safeFileName(key)}.json');
-  }
-
-  Future<void> initialize() async {
-    await _directory.create(recursive: true);
-  }
-
-  Future<bool> hasAccessToken() async {
-    return _fileForKey(_sessionKey).exists();
-  }
-
-  Future<String?> accessToken() {
-    return readValue(_sessionKey);
-  }
-
-  Future<void> persistSession(String persistSessionString) {
-    return writeValue(_sessionKey, persistSessionString);
-  }
-
-  Future<void> removePersistedSession() {
-    return removeValue(_sessionKey);
-  }
-
-  Future<String?> readValue(String key) async {
-    final file = _fileForKey(key);
-    if (!await file.exists()) return null;
-    final payload = jsonDecode(await file.readAsString());
-    if (payload is Map<String, dynamic>) {
-      return payload['value'] as String?;
-    }
-    return null;
-  }
-
-  Future<void> writeValue(String key, String value) async {
-    await initialize();
-    await _fileForKey(key).writeAsString(jsonEncode({'value': value}));
-  }
-
-  Future<void> removeValue(String key) async {
-    final file = _fileForKey(key);
-    if (await file.exists()) {
-      await file.delete();
-    }
-  }
-
-  static String _safeFileName(String value) {
-    return value.replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_');
-  }
-
-  static String _appSupportPath() {
-    if (Platform.isMacOS) {
-      return '${Platform.environment['HOME']}/Library/Application Support/WalkieTalkie';
-    }
-    if (Platform.isWindows) {
-      final appData = Platform.environment['APPDATA'];
-      if (appData != null && appData.isNotEmpty) {
-        return '$appData\\WalkieTalkie';
-      }
-    }
-    return '${Directory.systemTemp.path}/walkie_talkie';
-  }
-}
 
 class WalkieTalkieApp extends StatefulWidget {
   const WalkieTalkieApp({super.key});
@@ -505,9 +351,7 @@ class AuthController extends ChangeNotifier {
   void start() {
     user = _client.auth.currentUser;
     authMessage = user == null ? authMessage : 'Signed in as ${user!.email}';
-    if (_enableDesktopDeepLinks) {
-      _listenForDeepLinks();
-    }
+    _listenForDeepLinks();
     _authSubscription = _client.auth.onAuthStateChange.listen((data) {
       user = data.session?.user;
       signingIn = false;

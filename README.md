@@ -47,7 +47,6 @@ finishes the login through a local callback page:
 
 ```text
 http://localhost:3000/auth/callback
-http://localhost:3001/auth/callback
 ```
 
 The packaged app also supports this custom desktop deep link:
@@ -73,10 +72,6 @@ Supabase Authentication URL Configuration should allow:
 ```text
 http://localhost:3000/auth/callback
 http://localhost:3000/**
-http://localhost:3001/auth/callback
-http://localhost:3001/**
-http://localhost:3002/auth/callback
-http://localhost:3002/**
 walkie-talkie://login-callback
 ```
 
@@ -101,45 +96,6 @@ pokes
 ```
 
 and RPC functions for atomic request approval, friend deletion, group admin actions, and poke clearing. Re-run the SQL after pulling app changes that touch Supabase tables or policies.
-
-## Testing Two Accounts On One Computer
-
-By default, two copies of the desktop app share the same saved Supabase login.
-For local testing, run each copy with a different `WT_PROFILE` value:
-
-```sh
-WT_PROFILE=A flutter run -d macos
-```
-
-Then open a second terminal and run:
-
-```sh
-WT_PROFILE=B flutter run -d macos
-```
-
-Log in to a different Google account in each app. The app stores Supabase auth
-separately for each profile, so account A and account B can stay signed in at
-the same time. Profile A uses OAuth callback port `3000`, profile B uses
-`3001`, profile C uses `3002`.
-
-For named test profiles like `A` and `B`, the app uses only the localhost OAuth
-callback and does not handle the `walkie-talkie://` deep link. If the browser
-opens an already-running app during login, check that Supabase is allowing the
-matching localhost redirect URL for that profile.
-
-For Windows PowerShell:
-
-```powershell
-$env:WT_PROFILE="A"; flutter run -d windows
-$env:WT_PROFILE="B"; flutter run -d windows
-```
-
-If a port is already used by another local app, set an explicit auth callback
-port:
-
-```sh
-WT_PROFILE=B WT_AUTH_PORT=3010 flutter run -d macos
-```
 
 ## Windows Runner Notes
 
