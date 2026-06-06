@@ -20,13 +20,13 @@ const _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
     'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a3doeXVzaHhlcGZncHV2Ym55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NDIxNTcsImV4cCI6MjA5NjMxODE1N30.'
     'IoMfLh8AVWE_CQixqFXkwN4JsyNmduWLo7k_OpFC4YY';
 const _authRedirectUri = 'walkie-talkie://login-callback';
-const _localAuthCallbackPort = 3000;
 const _sampleRate = 24000;
 const _channels = 1;
 const _bitsPerSample = 16;
 
 final _devProfile = _readDevProfile();
-const _localAuthRedirectUri =
+final _localAuthCallbackPort = _readLocalAuthCallbackPort(_devProfile);
+final _localAuthRedirectUri =
     'http://localhost:$_localAuthCallbackPort/auth/callback';
 
 String _readDevProfile() {
@@ -38,6 +38,24 @@ String _readDevProfile() {
     'WT_PROFILE',
     defaultValue: 'default',
   );
+}
+
+int _readLocalAuthCallbackPort(String profile) {
+  final explicitPort = int.tryParse(
+    Platform.environment['WT_AUTH_PORT'] ??
+        const String.fromEnvironment('WT_AUTH_PORT'),
+  );
+  if (explicitPort != null) return explicitPort;
+
+  final normalizedProfile = profile.trim().toUpperCase();
+  if (normalizedProfile.length == 1) {
+    final code = normalizedProfile.codeUnitAt(0);
+    if (code >= 65 && code <= 90) {
+      return 3000 + code - 65;
+    }
+  }
+  if (normalizedProfile == 'DEFAULT') return 3000;
+  return 3000 + profile.hashCode.abs() % 100;
 }
 
 Future<void> main() async {
