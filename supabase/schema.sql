@@ -98,7 +98,7 @@ drop policy if exists "contacts_select_self" on public.contacts;
 create policy "contacts_select_self"
 on public.contacts for select
 to authenticated
-using (auth.uid() = user_id);
+using (auth.uid() = user_id or auth.uid() = contact_id);
 
 drop policy if exists "contacts_insert_approved_related" on public.contacts;
 create policy "contacts_insert_approved_related"
@@ -253,6 +253,11 @@ begin
   on conflict do nothing;
 end;
 $$;
+
+insert into public.contacts (user_id, contact_id)
+select contact_id, user_id
+from public.contacts
+on conflict do nothing;
 
 create or replace function public.delete_contact(other_user_id uuid)
 returns void

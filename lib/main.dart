@@ -1497,14 +1497,24 @@ class ContactsController extends ChangeNotifier {
 
       final contactRows = await _client
           .from('contacts')
-          .select('contact:profiles!contacts_contact_id_fkey(*)')
-          .eq('user_id', user.id)
+          .select(
+            'user:profiles!contacts_user_id_fkey(*), '
+            'contact:profiles!contacts_contact_id_fkey(*)',
+          )
+          .or('user_id.eq.${user.id},contact_id.eq.${user.id}')
           .order('created_at');
-      contacts = List<Map<String, dynamic>>.from(contactRows as List)
-          .map((row) => UserProfile.fromJson(
-                Map<String, dynamic>.from(row['contact'] as Map),
-              ))
-          .toList();
+      final contactMap = <String, UserProfile>{};
+      for (final row in List<Map<String, dynamic>>.from(contactRows as List)) {
+        final rowUser = UserProfile.fromJson(
+          Map<String, dynamic>.from(row['user'] as Map),
+        );
+        final rowContact = UserProfile.fromJson(
+          Map<String, dynamic>.from(row['contact'] as Map),
+        );
+        final other = rowUser.id == user.id ? rowContact : rowUser;
+        contactMap[other.id] = other;
+      }
+      contacts = contactMap.values.toList();
 
       if (selectedContact == null && contacts.isNotEmpty) {
         selectedContact = contacts.first;
