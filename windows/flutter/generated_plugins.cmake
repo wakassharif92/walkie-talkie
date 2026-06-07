@@ -4,7 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   app_links
-  hotkey_manager
+  hotkey_manager_windows
   media_kit_libs_windows_audio
   record_windows
   screen_retriever

@@ -4,17 +4,25 @@ Future<void> registerAppProtocol(String scheme) async {
   if (!Platform.isWindows) return;
 
   final appPath = Platform.resolvedExecutable;
-  final command = '"$appPath" "%1"';
+  final escapedCommand = '"$appPath" "%1"'.replaceAll("'", "''");
   final script = '''
 \$base = "HKCU:\\Software\\Classes\\$scheme"
 New-Item -Path \$base -Force | Out-Null
 New-ItemProperty -Path \$base -Name "URL Protocol" -Value "" -PropertyType String -Force | Out-Null
 New-Item -Path "\$base\\shell\\open\\command" -Force | Out-Null
-Set-ItemProperty -Path "\$base\\shell\\open\\command" -Name "(default)" -Value '$command'
+Set-Item -Path "\$base\\shell\\open\\command" -Value '$escapedCommand'
 ''';
 
-  await Process.run(
+  final result = await Process.run(
     'powershell',
     ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
   );
+  if (result.exitCode != 0) {
+    throw ProcessException(
+      'powershell',
+      const ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command'],
+      result.stderr.toString(),
+      result.exitCode,
+    );
+  }
 }

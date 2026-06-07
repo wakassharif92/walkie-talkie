@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:record/record.dart';
@@ -53,7 +54,9 @@ Future<void> main() async {
     },
   );
 
-  await hotKeyManager.unregisterAll();
+  if (!Platform.isWindows) {
+    await hotKeyManager.unregisterAll();
+  }
   runApp(const WalkieTalkieApp());
 }
 
@@ -84,7 +87,9 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
     _contactsController.addListener(_syncAudioRouting);
     _syncAudioRouting();
     _configureTray();
-    _registerHotKeys();
+    if (!Platform.isWindows) {
+      _registerHotKeys();
+    }
     windowManager.addListener(this);
     tray.trayManager.addListener(this);
   }
@@ -183,8 +188,8 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
   }
 
   Future<void> _registerHotKeys() async {
-    Future<void> register(KeyCode key) async {
-      final hotKey = HotKey(key, scope: HotKeyScope.system);
+    Future<void> register(PhysicalKeyboardKey key) async {
+      final hotKey = HotKey(key: key, scope: HotKeyScope.system);
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (_) {
@@ -196,14 +201,18 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
       );
     }
 
-    for (final key in [
-      KeyCode.capsLock,
-      KeyCode.controlLeft,
-    ]) {
+    final keys = Platform.isWindows
+        ? const [PhysicalKeyboardKey.capsLock]
+        : const [
+            PhysicalKeyboardKey.capsLock,
+            PhysicalKeyboardKey.controlLeft,
+          ];
+
+    for (final key in keys) {
       try {
         await register(key);
       } catch (error) {
-        _controller.setNotice('Could not register ${key.keyLabel}: $error');
+        _controller.setNotice('Could not register ${key.debugName}: $error');
       }
     }
   }
@@ -289,7 +298,9 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
   Future<void> _quit() async {
     await _contactsController.goOffline();
     await _controller.dispose();
-    await hotKeyManager.unregisterAll();
+    if (!Platform.isWindows) {
+      await hotKeyManager.unregisterAll();
+    }
     await tray.trayManager.destroy();
     await windowManager.setPreventClose(false);
     await windowManager.destroy();
@@ -813,7 +824,7 @@ class _PresenceSwitch extends StatelessWidget {
           ),
           Switch(
             value: contactsController.online,
-            activeColor: const Color(0xFF38E07B),
+            activeThumbColor: const Color(0xFF38E07B),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             onChanged: contactsController.setOnline,
           ),
@@ -2381,7 +2392,9 @@ class _TalkFooter extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Hold Caps Lock or Left Ctrl',
+          Platform.isWindows
+              ? 'Hold the mic button'
+              : 'Hold Caps Lock or Left Ctrl',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.white38,
                 letterSpacing: 0,
@@ -2484,7 +2497,7 @@ class _Header extends StatelessWidget {
                 color: (connected
                         ? const Color(0xFF38E07B)
                         : const Color(0xFFFF4D5E))
-                    .withOpacity(0.45),
+                    .withValues(alpha: 0.45),
                 blurRadius: 18,
                 spreadRadius: 2,
               ),
