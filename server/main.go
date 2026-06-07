@@ -27,7 +27,7 @@ var hub = struct {
 
 func main() {
 	http.HandleFunc("/ws", handleWebSocket)
-	log.Println("WebSocket server listening on ws://localhost:8080/ws")
+	log.Println("WebSocket server listening on :8080/ws")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 

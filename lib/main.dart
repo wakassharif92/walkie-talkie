@@ -14,7 +14,12 @@ import 'package:window_manager/window_manager.dart';
 
 import 'protocol_registration.dart';
 
-const _serverUri = 'ws://localhost:8080/ws';
+const _defaultServerUri = 'ws://localhost:8080/ws';
+final _serverUri = Platform.environment['WALKIE_SERVER_URI'] ??
+    const String.fromEnvironment(
+      'WALKIE_SERVER_URI',
+      defaultValue: _defaultServerUri,
+    );
 const _supabaseUrl = 'https://uwkwhyushxepfgpuvbny.supabase.co';
 const _supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
     'eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV3a3doeXVzaHhlcGZncHV2Ym55Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3NDIxNTcsImV4cCI6MjA5NjMxODE1N30.'
@@ -244,7 +249,11 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
 
   Future<void> _registerHotKeys() async {
     Future<void> register(PhysicalKeyboardKey key) async {
-      final hotKey = HotKey(key: key, scope: HotKeyScope.system);
+      final hotKey = HotKey(
+        key: key,
+        modifiers: const [],
+        scope: HotKeyScope.system,
+      );
       await hotKeyManager.register(
         hotKey,
         keyDownHandler: (_) {
@@ -1003,45 +1012,48 @@ class _ContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      selected: selected,
-      selectedTileColor: const Color(0x2238E07B),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-            color: selected ? const Color(0xFF38E07B) : Colors.white10),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        selected: selected,
+        selectedTileColor: const Color(0x2238E07B),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+              color: selected ? const Color(0xFF38E07B) : Colors.white10),
+        ),
+        leading: _StatusDot(isOnline: contact.isOnline),
+        title: Text(
+          '${hasPoke ? '📣 ' : ''}${contact.label}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Text(contact.isOnline ? 'Online' : 'Offline'),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Contact actions',
+          onSelected: (value) {
+            switch (value) {
+              case 'poke':
+                onPoke();
+                break;
+              case 'delete':
+                onDelete();
+                break;
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'poke',
+              child: Text('Poke'),
+            ),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text('Delete friend'),
+            ),
+          ],
+        ),
+        onTap: onTap,
       ),
-      leading: _StatusDot(isOnline: contact.isOnline),
-      title: Text(
-        '${hasPoke ? '📣 ' : ''}${contact.label}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(contact.isOnline ? 'Online' : 'Offline'),
-      trailing: PopupMenuButton<String>(
-        tooltip: 'Contact actions',
-        onSelected: (value) {
-          switch (value) {
-            case 'poke':
-              onPoke();
-              break;
-            case 'delete':
-              onDelete();
-              break;
-          }
-        },
-        itemBuilder: (context) => const [
-          PopupMenuItem(
-            value: 'poke',
-            child: Text('Poke'),
-          ),
-          PopupMenuItem(
-            value: 'delete',
-            child: Text('Delete friend'),
-          ),
-        ],
-      ),
-      onTap: onTap,
     );
   }
 }
@@ -1057,22 +1069,25 @@ class _PokeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      dense: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: Colors.white10),
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        dense: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: Colors.white10),
+        ),
+        leading: const Icon(Icons.campaign_rounded, color: Color(0xFF38E07B)),
+        title: Text(
+          poke.sender.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: const Text('Tried to talk to you'),
+        onTap: () {
+          contactsController.selectContact(poke.sender);
+        },
       ),
-      leading: const Icon(Icons.campaign_rounded, color: Color(0xFF38E07B)),
-      title: Text(
-        poke.sender.label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: const Text('Tried to talk to you'),
-      onTap: () {
-        contactsController.selectContact(poke.sender);
-      },
     );
   }
 }
@@ -1182,28 +1197,32 @@ class _GroupsSection extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(height: 4),
               itemBuilder: (context, index) {
                 final member = contactsController.selectedGroupMembers[index];
-                return ListTile(
-                  dense: true,
-                  leading: _StatusDot(isOnline: member.profile.isOnline),
-                  title: Text(
-                    member.profile.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                return Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    dense: true,
+                    leading: _StatusDot(isOnline: member.profile.isOnline),
+                    title: Text(
+                      member.profile.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(member.role),
+                    trailing: selectedGroup.isAdmin ||
+                            member.profile.id ==
+                                contactsController.authController.user?.id
+                        ? IconButton(
+                            tooltip: member.profile.id ==
+                                    contactsController.authController.user?.id
+                                ? 'Leave group'
+                                : 'Remove member',
+                            onPressed: () => contactsController
+                                .removeSelectedGroupMember(member),
+                            icon:
+                                const Icon(Icons.remove_circle_outline_rounded),
+                          )
+                        : null,
                   ),
-                  subtitle: Text(member.role),
-                  trailing: selectedGroup.isAdmin ||
-                          member.profile.id ==
-                              contactsController.authController.user?.id
-                      ? IconButton(
-                          tooltip: member.profile.id ==
-                                  contactsController.authController.user?.id
-                              ? 'Leave group'
-                              : 'Remove member',
-                          onPressed: () => contactsController
-                              .removeSelectedGroupMember(member),
-                          icon: const Icon(Icons.remove_circle_outline_rounded),
-                        )
-                      : null,
                 );
               },
             ),
@@ -1985,7 +2004,7 @@ class WalkieTalkieController extends ChangeNotifier {
         cancelOnError: true,
       );
     } catch (error) {
-      _setConnection(false, 'Server unavailable. Retrying...');
+      _setConnection(false, 'Audio server unavailable. Retrying...');
       _scheduleReconnect();
     }
   }
@@ -2061,7 +2080,7 @@ class WalkieTalkieController extends ChangeNotifier {
   void _handleDisconnect([Object? error]) {
     _socket = null;
     _stopStreamingMic(sendRelease: false);
-    _setConnection(false, 'Disconnected. Retrying...');
+    _setConnection(false, 'Audio server disconnected. Retrying...');
     _scheduleReconnect();
   }
 
@@ -2222,12 +2241,15 @@ class RawPcmMediaKitPlayer {
 
   Future<void> _play(Uint8List pcm) async {
     final media = await Media.memory(_wavFromPcm(pcm), type: 'audio/wav');
-    if (_opened) {
-      await _player.add(media);
-    } else {
+    if (!_opened || _player.state.completed) {
       _opened = true;
       await _player.open(media, play: true);
       await _player.setVolume(100);
+    } else {
+      await _player.add(media);
+      if (!_player.state.playing) {
+        await _player.play();
+      }
     }
   }
 
@@ -2571,7 +2593,7 @@ class _Header extends StatelessWidget {
         ),
         const SizedBox(width: 10),
         Text(
-          connected ? 'Online' : 'Offline',
+          connected ? 'Server online' : 'Server offline',
           style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: Colors.white70,
                 letterSpacing: 0,
@@ -2687,7 +2709,7 @@ class PushToTalkButton extends StatelessWidget {
         );
       case TalkState.disconnected:
         return const _PttButtonStyle(
-          label: 'OFFLINE',
+          label: 'SERVER OFFLINE',
           icon: Icons.wifi_off_rounded,
           color: Color(0xFF30343B),
           border: Color(0xFF565D68),

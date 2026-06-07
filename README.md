@@ -6,6 +6,18 @@ A Flutter desktop push-to-talk client for Windows and macOS. It connects to a lo
 ws://localhost:8080/ws
 ```
 
+For LAN testing, point the app at the machine running the Go server:
+
+```sh
+WALKIE_SERVER_URI=ws://192.168.2.20:8080/ws flutter run -d macos
+```
+
+When using `flutter run`, you can also pass it as a compile-time value:
+
+```sh
+flutter run -d macos --dart-define=WALKIE_SERVER_URI=ws://192.168.2.20:8080/ws
+```
+
 ## Protocol
 
 The app sends text control messages and raw PCM binary audio frames over the same WebSocket.
