@@ -25,6 +25,8 @@ const _localAuthRedirectUri = 'http://localhost:3000/auth/callback';
 const _sampleRate = 24000;
 const _channels = 1;
 const _bitsPerSample = 16;
+const _windowsAuthStorageDirName = 'WalkieTalkie';
+const _authSessionFileName = 'supabase_session.txt';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +36,7 @@ Future<void> main() async {
     anonKey: _supabaseAnonKey,
     authFlowType: AuthFlowType.pkce,
     authCallbackUrlHostname: 'login-callback',
+    localStorage: _supabaseLocalStorage(),
   );
   await registerAppProtocol('walkie-talkie');
 
@@ -58,6 +61,58 @@ Future<void> main() async {
     await hotKeyManager.unregisterAll();
   }
   runApp(const WalkieTalkieApp());
+}
+
+LocalStorage? _supabaseLocalStorage() {
+  if (!Platform.isWindows) return null;
+
+  final localAppData = Platform.environment['LOCALAPPDATA'];
+  if (localAppData == null || localAppData.isEmpty) return null;
+
+  return FileLocalStorage(
+    [
+      localAppData,
+      _windowsAuthStorageDirName,
+      'auth',
+    ].join(Platform.pathSeparator),
+  );
+}
+
+class FileLocalStorage extends LocalStorage {
+  FileLocalStorage(String directoryPath)
+      : super(
+          initialize: () async {
+            await Directory(directoryPath).create(recursive: true);
+          },
+          hasAccessToken: () async {
+            final file = File(_sessionFilePath(directoryPath));
+            return file.existsSync() && file.lengthSync() > 0;
+          },
+          accessToken: () async {
+            final file = File(_sessionFilePath(directoryPath));
+            if (!file.existsSync()) return null;
+            final value = await file.readAsString();
+            return value.isEmpty ? null : value;
+          },
+          removePersistedSession: () async {
+            final file = File(_sessionFilePath(directoryPath));
+            if (file.existsSync()) {
+              await file.delete();
+            }
+          },
+          persistSession: (session) async {
+            final file = File(_sessionFilePath(directoryPath));
+            await file.parent.create(recursive: true);
+            await file.writeAsString(session, flush: true);
+          },
+        );
+
+  static String _sessionFilePath(String directoryPath) {
+    return [
+      directoryPath,
+      _authSessionFileName,
+    ].join(Platform.pathSeparator);
+  }
 }
 
 enum TalkState { idle, requesting, transmitting, busy, disconnected }
