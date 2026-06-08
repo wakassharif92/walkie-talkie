@@ -32,6 +32,8 @@ const _channels = 1;
 const _bitsPerSample = 16;
 const _windowsAuthStorageDirName = 'WalkieTalkie';
 const _authSessionFileName = 'supabase_session.txt';
+const _desktopCanvasSize = Size(1040, 680);
+const _minimumWindowSize = Size(560, 420);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,8 +50,8 @@ Future<void> main() async {
   await windowManager.ensureInitialized();
   await windowManager.waitUntilReadyToShow(
     const WindowOptions(
-      size: Size(760, 560),
-      minimumSize: Size(560, 460),
+      size: Size(1040, 720),
+      minimumSize: _minimumWindowSize,
       center: true,
       title: 'Walkie Talkie',
       backgroundColor: Color(0xFF101216),
@@ -400,10 +402,71 @@ class _WalkieTalkieAppState extends State<WalkieTalkieApp>
         fontFamily: Platform.isMacOS ? 'SF Pro Display' : 'Segoe UI',
         useMaterial3: true,
       ),
-      home: DesktopShell(
-        authController: _authController,
-        contactsController: _contactsController,
-        talkController: _controller,
+      home: DesktopCanvas(
+        child: DesktopShell(
+          authController: _authController,
+          contactsController: _contactsController,
+          talkController: _controller,
+        ),
+      ),
+    );
+  }
+}
+
+class DesktopCanvas extends StatefulWidget {
+  const DesktopCanvas({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<DesktopCanvas> createState() => _DesktopCanvasState();
+}
+
+class _DesktopCanvasState extends State<DesktopCanvas> {
+  final ScrollController _horizontalController = ScrollController();
+  final ScrollController _verticalController = ScrollController();
+
+  @override
+  void dispose() {
+    _horizontalController.dispose();
+    _verticalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment.topCenter,
+          radius: 1.25,
+          colors: [
+            Color(0xFF23272E),
+            Color(0xFF101216),
+          ],
+        ),
+      ),
+      child: Scrollbar(
+        controller: _verticalController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _verticalController,
+          child: Scrollbar(
+            controller: _horizontalController,
+            thumbVisibility: true,
+            notificationPredicate: (notification) =>
+                notification.metrics.axis == Axis.horizontal,
+            child: SingleChildScrollView(
+              controller: _horizontalController,
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: _desktopCanvasSize.width,
+                height: _desktopCanvasSize.height,
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -644,7 +707,9 @@ class DesktopShell extends StatelessWidget {
   }
 }
 
-class ContactsDashboard extends StatelessWidget {
+enum _SidebarSection { add, contacts, groups, pokes }
+
+class ContactsDashboard extends StatefulWidget {
   const ContactsDashboard({
     super.key,
     required this.authController,
@@ -657,33 +722,67 @@ class ContactsDashboard extends StatelessWidget {
   final WalkieTalkieController talkController;
 
   @override
+  State<ContactsDashboard> createState() => _ContactsDashboardState();
+}
+
+class _ContactsDashboardState extends State<ContactsDashboard> {
+  _SidebarSection _section = _SidebarSection.contacts;
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: Listenable.merge([contactsController, talkController]),
+      animation:
+          Listenable.merge([widget.contactsController, widget.talkController]),
       builder: (context, _) {
         return Scaffold(
+          backgroundColor: Colors.transparent,
           body: SafeArea(
-            child: Row(
-              children: [
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 320,
-                    maxWidth: 380,
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                children: [
+                  _MaconiTopBar(
+                    contactsController: widget.contactsController,
                   ),
-                  child: _ContactsPanel(
-                    authController: authController,
-                    contactsController: contactsController,
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SideRail(
+                          selected: _section,
+                          authController: widget.authController,
+                          requestCount:
+                              widget.contactsController.incomingRequests.length,
+                          pokeCount:
+                              widget.contactsController.incomingPokes.length,
+                          onSelected: (section) {
+                            setState(() {
+                              _section = section;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 14),
+                        SizedBox(
+                          width: 310,
+                          child: _SidebarPanel(
+                            section: _section,
+                            contactsController: widget.contactsController,
+                          ),
+                        ),
+                        const SizedBox(width: 18),
+                        Expanded(
+                          child: WalkieTalkieHome(
+                            controller: widget.talkController,
+                            authController: widget.authController,
+                            contactsController: widget.contactsController,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const VerticalDivider(width: 1, color: Colors.white10),
-                Expanded(
-                  child: WalkieTalkieHome(
-                    controller: talkController,
-                    authController: authController,
-                    contactsController: contactsController,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -692,36 +791,346 @@ class ContactsDashboard extends StatelessWidget {
   }
 }
 
-class _ContactsPanel extends StatelessWidget {
-  const _ContactsPanel({
-    required this.authController,
+class _MaconiTopBar extends StatelessWidget {
+  const _MaconiTopBar({
     required this.contactsController,
   });
 
+  final ContactsController contactsController;
+
+  @override
+  Widget build(BuildContext context) {
+    final online = contactsController.online;
+    return Container(
+      height: 58,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      decoration: BoxDecoration(
+        color: const Color(0xCC15181E),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x44000000),
+            blurRadius: 22,
+            offset: Offset(0, 14),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: Color(0xFF38E07B),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.headphones_rounded,
+              color: Color(0xFF0D2619),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Maconi',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0,
+                ),
+          ),
+          const Spacer(),
+          Text(
+            online ? 'Online' : 'Offline',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: online ? const Color(0xFFB9F9CF) : Colors.white54,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0,
+                ),
+          ),
+          const SizedBox(width: 10),
+          Tooltip(
+            message: online ? 'Go offline' : 'Go online',
+            child: InkResponse(
+              radius: 24,
+              onTap: () => contactsController.setOnline(!online),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: online
+                      ? const Color(0x2238E07B)
+                      : const Color(0x22FF4D5E),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: online
+                        ? const Color(0xFF38E07B)
+                        : const Color(0xFFFF4D5E),
+                  ),
+                ),
+                child: Icon(
+                  Icons.power_settings_new_rounded,
+                  color: online
+                      ? const Color(0xFF38E07B)
+                      : const Color(0xFFFF6B78),
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SideRail extends StatelessWidget {
+  const _SideRail({
+    required this.selected,
+    required this.authController,
+    required this.requestCount,
+    required this.pokeCount,
+    required this.onSelected,
+  });
+
+  final _SidebarSection selected;
   final AuthController authController;
+  final int requestCount;
+  final int pokeCount;
+  final ValueChanged<_SidebarSection> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 68,
+      decoration: BoxDecoration(
+        color: const Color(0xEE10351F),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x5538E07B)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55000000),
+            blurRadius: 26,
+            offset: Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          _RailButton(
+            tooltip: 'Add member',
+            icon: Icons.person_add_alt_1_rounded,
+            selected: selected == _SidebarSection.add,
+            badgeCount: requestCount,
+            onPressed: () => onSelected(_SidebarSection.add),
+          ),
+          _RailButton(
+            tooltip: 'Contacts',
+            icon: Icons.groups_rounded,
+            selected: selected == _SidebarSection.contacts,
+            onPressed: () => onSelected(_SidebarSection.contacts),
+          ),
+          _RailButton(
+            tooltip: 'Groups',
+            icon: Icons.workspaces_rounded,
+            selected: selected == _SidebarSection.groups,
+            onPressed: () => onSelected(_SidebarSection.groups),
+          ),
+          _RailButton(
+            tooltip: 'Pokes',
+            icon: Icons.notifications_rounded,
+            selected: selected == _SidebarSection.pokes,
+            badgeCount: pokeCount,
+            onPressed: () => onSelected(_SidebarSection.pokes),
+          ),
+          const Spacer(),
+          Container(
+            width: 34,
+            height: 1,
+            color: Colors.white12,
+          ),
+          const SizedBox(height: 12),
+          PopupMenuButton<String>(
+            tooltip: 'Settings',
+            onSelected: (value) {
+              if (value == 'sign_out') {
+                authController.signOut();
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Text(
+                  authController.user?.email ?? 'Google user',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'sign_out',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Sign out'),
+                  ],
+                ),
+              ),
+            ],
+            child: const SizedBox(
+              width: 46,
+              height: 46,
+              child: Icon(
+                Icons.settings_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+      ),
+    );
+  }
+}
+
+class _RailButton extends StatelessWidget {
+  const _RailButton({
+    required this.tooltip,
+    required this.icon,
+    required this.selected,
+    required this.onPressed,
+    this.badgeCount,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onPressed;
+  final int? badgeCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Tooltip(
+        message: tooltip,
+        child: InkResponse(
+          radius: 26,
+          onTap: onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: selected ? Colors.white : Colors.transparent,
+              shape: BoxShape.circle,
+              boxShadow: selected
+                  ? const [
+                      BoxShadow(
+                        color: Color(0x5538E07B),
+                        blurRadius: 18,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Center(
+                  child: Icon(
+                    icon,
+                    color: selected ? const Color(0xFF10351F) : Colors.white,
+                    size: 21,
+                  ),
+                ),
+                if ((badgeCount ?? 0) > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF4D5E),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarPanel extends StatelessWidget {
+  const _SidebarPanel({
+    required this.section,
+    required this.contactsController,
+  });
+
+  final _SidebarSection section;
   final ContactsController contactsController;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: const Color(0xFF12151A),
+      decoration: BoxDecoration(
+        color: const Color(0xCC15181E),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x66000000),
+            blurRadius: 26,
+            offset: Offset(0, 18),
+          ),
+        ],
+      ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(18),
-        child: Column(
+        child: _SidebarSectionBody(
+          section: section,
+          contactsController: contactsController,
+        ),
+      ),
+    );
+  }
+}
+
+class _SidebarSectionBody extends StatelessWidget {
+  const _SidebarSectionBody({
+    required this.section,
+    required this.contactsController,
+  });
+
+  final _SidebarSection section;
+  final ContactsController contactsController;
+
+  @override
+  Widget build(BuildContext context) {
+    switch (section) {
+      case _SidebarSection.add:
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _AccountStrip(authController: authController),
-            const SizedBox(height: 14),
-            _PresenceSwitch(contactsController: contactsController),
-            const SizedBox(height: 14),
+            const _SectionTitle(title: 'Add member'),
+            const SizedBox(height: 12),
             _AddContactForm(contactsController: contactsController),
             if (contactsController.message.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               _InlineStatus(message: contactsController.message),
             ],
             if (contactsController.incomingRequests.isNotEmpty) ...[
               const SizedBox(height: 18),
-              const _SectionTitle(title: 'Requests'),
+              const _SectionTitle(title: 'Received requests'),
               const SizedBox(height: 8),
               ...contactsController.incomingRequests.map(
                 (request) => _RequestTile(
@@ -730,18 +1139,23 @@ class _ContactsPanel extends StatelessWidget {
                 ),
               ),
             ],
-            if (contactsController.incomingPokes.isNotEmpty) ...[
+            if (contactsController.outgoingRequests.isNotEmpty) ...[
               const SizedBox(height: 18),
-              const _SectionTitle(title: 'Pokes'),
+              const _SectionTitle(title: 'Pending requests'),
               const SizedBox(height: 8),
-              ...contactsController.incomingPokes.map(
-                (poke) => _PokeTile(
-                  poke: poke,
-                  contactsController: contactsController,
+              ...contactsController.outgoingRequests.map(
+                (request) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _PendingRequestTile(request: request),
                 ),
               ),
             ],
-            const SizedBox(height: 18),
+          ],
+        );
+      case _SidebarSection.contacts:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             _SectionTitle(
               title: 'Contacts',
               trailing: IconButton(
@@ -753,6 +1167,12 @@ class _ContactsPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
+            _InlineStatus(
+              message: contactsController.contacts.length == 1
+                  ? '1 contact ready.'
+                  : '${contactsController.contacts.length} contacts ready.',
+            ),
+            const SizedBox(height: 14),
             if (contactsController.contacts.isEmpty)
               const _EmptyState(label: 'No contacts yet')
             else
@@ -770,12 +1190,31 @@ class _ContactsPanel extends StatelessWidget {
                   ),
                 );
               }),
-            const SizedBox(height: 18),
-            _GroupsSection(contactsController: contactsController),
           ],
-        ),
-      ),
-    );
+        );
+      case _SidebarSection.groups:
+        return _GroupsSection(contactsController: contactsController);
+      case _SidebarSection.pokes:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _SectionTitle(title: 'Pokes'),
+            const SizedBox(height: 8),
+            if (contactsController.incomingPokes.isEmpty)
+              const _EmptyState(label: 'No pokes')
+            else
+              ...contactsController.incomingPokes.map(
+                (poke) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _PokeTile(
+                    poke: poke,
+                    contactsController: contactsController,
+                  ),
+                ),
+              ),
+          ],
+        );
+    }
   }
 }
 
@@ -854,46 +1293,6 @@ class _EmptyState extends StatelessWidget {
         border: Border.all(color: Colors.white10),
       ),
       child: Text(label, style: const TextStyle(color: Colors.white38)),
-    );
-  }
-}
-
-class _PresenceSwitch extends StatelessWidget {
-  const _PresenceSwitch({required this.contactsController});
-
-  final ContactsController contactsController;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFF181B21),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          _StatusDot(isOnline: contactsController.online),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              contactsController.online ? 'Online' : 'Offline',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-          Switch(
-            value: contactsController.online,
-            activeThumbColor: const Color(0xFF38E07B),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            onChanged: contactsController.setOnline,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -986,6 +1385,56 @@ class _RequestTile extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingRequestTile extends StatelessWidget {
+  const _PendingRequestTile({required this.request});
+
+  final SentContactRequest request;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF181B21),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.schedule_rounded,
+            color: Color(0xFFFFD166),
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  request.receiver.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                const Text(
+                  'Waiting for approval',
+                  style: TextStyle(color: Colors.white54),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1268,12 +1717,25 @@ class LoginView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
-            child: Padding(
+            child: Container(
               padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: const Color(0xCC15181E),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white12),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x66000000),
+                    blurRadius: 28,
+                    offset: Offset(0, 18),
+                  ),
+                ],
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1399,6 +1861,30 @@ class ContactRequest {
   }
 }
 
+class SentContactRequest {
+  const SentContactRequest({
+    required this.id,
+    required this.receiver,
+    required this.createdAt,
+  });
+
+  final String id;
+  final UserProfile receiver;
+  final DateTime? createdAt;
+
+  factory SentContactRequest.fromJson(Map<String, dynamic> json) {
+    return SentContactRequest(
+      id: json['id'] as String,
+      receiver: UserProfile.fromJson(
+        Map<String, dynamic>.from(json['receiver'] as Map),
+      ),
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'] as String),
+    );
+  }
+}
+
 class TalkGroup {
   const TalkGroup({
     required this.id,
@@ -1489,6 +1975,7 @@ class ContactsController extends ChangeNotifier {
   TalkGroup? selectedGroup;
   List<UserProfile> contacts = [];
   List<ContactRequest> incomingRequests = [];
+  List<SentContactRequest> outgoingRequests = [];
   List<TalkGroup> groups = [];
   List<GroupMember> selectedGroupMembers = [];
   List<PokeNotice> incomingPokes = [];
@@ -1610,6 +2097,18 @@ class ContactsController extends ChangeNotifier {
           .map(ContactRequest.fromJson)
           .toList();
 
+      final outgoingRequestRows = await _client
+          .from('contact_requests')
+          .select(
+              'id, created_at, receiver:profiles!contact_requests_receiver_id_fkey(*)')
+          .eq('sender_id', user.id)
+          .eq('status', 'pending')
+          .order('created_at');
+      outgoingRequests =
+          List<Map<String, dynamic>>.from(outgoingRequestRows as List)
+              .map(SentContactRequest.fromJson)
+              .toList();
+
       final groupRows = await _client
           .from('group_members')
           .select('role, group:groups!group_members_group_id_fkey(*)')
@@ -1677,15 +2176,20 @@ class ContactsController extends ChangeNotifier {
       }
 
       final receiver = UserProfile.fromJson(matches.first);
-      await _client.from('contact_requests').upsert({
-        'sender_id': user.id,
-        'receiver_id': receiver.id,
-        'status': 'pending',
-      });
+      await _client.rpc(
+        'send_contact_request',
+        params: {'target_user_id': receiver.id},
+      );
       emailController.clear();
       message = 'Request sent to ${receiver.email}.';
+      await refresh(silent: true);
     } catch (error) {
-      message = 'Could not send request: $error';
+      final errorText = error.toString();
+      if (errorText.contains('already your contact')) {
+        message = '$email is already in your contacts.';
+      } else {
+        message = 'Could not send request: $error';
+      }
     } finally {
       loading = false;
       notifyListeners();
@@ -1931,6 +2435,7 @@ class ContactsController extends ChangeNotifier {
     groups = [];
     selectedGroupMembers = [];
     incomingRequests = [];
+    outgoingRequests = [];
     incomingPokes = [];
     online = false;
     message = 'Signed out';
@@ -2315,51 +2820,68 @@ class WalkieTalkieHome extends StatelessWidget {
             ((contactsController?.online ?? true) &&
                 ((contact?.isOnline ?? false) || group != null));
         return Scaffold(
-          body: LayoutBuilder(
-            builder: (context, constraints) {
-              final buttonSize = constraints.maxHeight < 650 ? 220.0 : 280.0;
-              return Padding(
-                padding: const EdgeInsets.fromLTRB(32, 28, 32, 22),
-                child: Column(
-                  children: [
-                    _Header(controller: controller),
-                    const SizedBox(height: 22),
-                    _SelectedContactHeader(contact: contact, group: group),
-                    const Spacer(),
-                    PushToTalkButton(
-                      controller: controller,
-                      size: buttonSize,
-                      enabled: canTalk,
-                      disabledLabel: _disabledTalkLabel(
-                        contactsController: contactsController,
-                        contact: contact,
-                        group: group,
-                      ),
-                      onStartTalk: () {
-                        if (contact != null) {
-                          contactsController?.clearPokeFrom(contact.id);
-                        }
-                      },
-                    ),
-                    const Spacer(),
-                    _TalkFooter(
-                      message: canTalk
-                          ? controller.notice
-                          : _disabledTalkNotice(
-                              contact: contact,
-                              group: group,
-                            ),
-                      receivedChunks: controller.receivedChunks,
-                      receivedBytes: controller.receivedBytes,
-                    ),
-                  ],
+          backgroundColor: Colors.transparent,
+          body: Container(
+            decoration: BoxDecoration(
+              color: const Color(0x99101318),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white10),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x55000000),
+                  blurRadius: 32,
+                  offset: Offset(0, 20),
                 ),
-              );
-            },
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(36, 24, 36, 18),
+              child: Column(
+                children: [
+                  _SelectedContactHeader(contact: contact, group: group),
+                  const SizedBox(height: 18),
+                  PushToTalkButton(
+                    controller: controller,
+                    targetName: _targetName(contact: contact, group: group),
+                    enabled: canTalk,
+                    disabledLabel: _disabledTalkLabel(
+                      contactsController: contactsController,
+                      contact: contact,
+                      group: group,
+                    ),
+                    onStartTalk: () {
+                      if (contact != null) {
+                        contactsController?.clearPokeFrom(contact.id);
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _TalkFooter(
+                    message: canTalk
+                        ? controller.notice
+                        : _disabledTalkNotice(
+                            contact: contact,
+                            group: group,
+                          ),
+                    receivedChunks: controller.receivedChunks,
+                    receivedBytes: controller.receivedBytes,
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },
     );
+  }
+
+  String _targetName({
+    required UserProfile? contact,
+    required TalkGroup? group,
+  }) {
+    if (group != null) return group.name;
+    if (contact != null) return contact.label;
+    return 'No contact selected';
   }
 
   String _disabledTalkLabel({
@@ -2469,7 +2991,7 @@ class _TalkFooter extends StatelessWidget {
       children: [
         Text(
           message,
-          maxLines: 2,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -2477,7 +2999,7 @@ class _TalkFooter extends StatelessWidget {
                 letterSpacing: 0,
               ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           Platform.isWindows
               ? 'Hold the mic button'
@@ -2487,195 +3009,189 @@ class _TalkFooter extends StatelessWidget {
                 letterSpacing: 0,
               ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          'Received $receivedChunks chunks / $receivedBytes bytes',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Colors.white30,
-                letterSpacing: 0,
-              ),
-        ),
       ],
     );
   }
 }
 
-class _AccountStrip extends StatelessWidget {
-  const _AccountStrip({required this.authController});
-
-  final AuthController authController;
-
-  @override
-  Widget build(BuildContext context) {
-    final email = authController.user?.email ?? 'Google user';
-    return Container(
-      height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF181B21),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.account_circle_rounded,
-            color: Color(0xFF38E07B),
-            size: 24,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              email,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0,
-                  ),
-            ),
-          ),
-          TextButton.icon(
-            onPressed: authController.signOut,
-            icon: const Icon(Icons.logout_rounded, size: 18),
-            label: const Text('Sign Out'),
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.controller});
-
-  final WalkieTalkieController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    final connected = controller.connected;
-    return Row(
-      children: [
-        const Icon(Icons.graphic_eq_rounded,
-            size: 34, color: Color(0xFF38E07B)),
-        const SizedBox(width: 12),
-        Text(
-          'Walkie Talkie',
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0,
-              ),
-        ),
-        const Spacer(),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          width: 12,
-          height: 12,
-          decoration: BoxDecoration(
-            color:
-                connected ? const Color(0xFF38E07B) : const Color(0xFFFF4D5E),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: (connected
-                        ? const Color(0xFF38E07B)
-                        : const Color(0xFFFF4D5E))
-                    .withValues(alpha: 0.45),
-                blurRadius: 18,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          connected ? 'Server online' : 'Server offline',
-          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Colors.white70,
-                letterSpacing: 0,
-              ),
-        ),
-      ],
-    );
-  }
-}
-
-class PushToTalkButton extends StatelessWidget {
+class PushToTalkButton extends StatefulWidget {
   const PushToTalkButton({
     super.key,
     required this.controller,
-    this.size = 280,
+    required this.targetName,
     this.enabled = true,
     this.disabledLabel,
     this.onStartTalk,
   });
 
   final WalkieTalkieController controller;
-  final double size;
+  final String targetName;
   final bool enabled;
   final String? disabledLabel;
   final FutureOr<void> Function()? onStartTalk;
 
   @override
+  State<PushToTalkButton> createState() => _PushToTalkButtonState();
+}
+
+class _PushToTalkButtonState extends State<PushToTalkButton> {
+  static const _idleAsset = 'lib/assets/walkie_talkie_icon.png';
+  static const _activeAsset = 'lib/assets/active_walkie_talkie_icon.png';
+  static const _signalAssets = [
+    'lib/assets/first_signal.png',
+    'lib/assets/second_signal.png',
+    'lib/assets/third_signal.png',
+  ];
+
+  Timer? _signalTimer;
+  bool _pressed = false;
+  int _signalIndex = 0;
+
+  bool get _disabled =>
+      widget.controller.state == TalkState.busy ||
+      widget.controller.state == TalkState.disconnected ||
+      !widget.enabled;
+
+  @override
+  void didUpdateWidget(covariant PushToTalkButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_disabled && _pressed) {
+      _stopPressAnimation();
+    }
+  }
+
+  @override
+  void dispose() {
+    _signalTimer?.cancel();
+    super.dispose();
+  }
+
+  void _startPressAnimation() {
+    if (_pressed) return;
+    setState(() {
+      _pressed = true;
+      _signalIndex = 0;
+    });
+    _signalTimer?.cancel();
+    _signalTimer = Timer.periodic(const Duration(milliseconds: 260), (_) {
+      if (!mounted || !_pressed) return;
+      setState(() {
+        _signalIndex = (_signalIndex + 1) % _signalAssets.length;
+      });
+    });
+  }
+
+  void _stopPressAnimation() {
+    _signalTimer?.cancel();
+    if (!_pressed) return;
+    setState(() {
+      _pressed = false;
+      _signalIndex = 0;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final style = enabled
-        ? _buttonStyle(controller.state, controller.remoteTalking)
+    final style = widget.enabled
+        ? _buttonStyle(widget.controller.state, widget.controller.remoteTalking)
         : _PttButtonStyle(
-            label: disabledLabel ?? 'UNAVAILABLE',
-            icon: Icons.block_rounded,
-            color: const Color(0xFF30343B),
-            border: const Color(0xFF565D68),
-            glow: const Color(0x33565D68),
+            label: widget.disabledLabel ?? 'UNAVAILABLE',
+            glow: const Color(0x55F3E879),
           );
-    final disabled = controller.state == TalkState.busy ||
-        controller.state == TalkState.disconnected ||
-        !enabled;
+    final disabled = _disabled;
 
     return GestureDetector(
       onTapDown: disabled
           ? null
           : (_) async {
-              await onStartTalk?.call();
-              await controller.requestMic();
+              _startPressAnimation();
+              await widget.onStartTalk?.call();
+              await widget.controller.requestMic();
             },
-      onTapUp: disabled ? null : (_) => controller.releaseMic(),
-      onTapCancel: disabled ? null : controller.releaseMic,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: style.color,
-          border: Border.all(color: style.border, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: style.glow,
-              blurRadius: controller.state == TalkState.transmitting ? 64 : 28,
-              spreadRadius: controller.state == TalkState.transmitting ? 10 : 2,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(style.icon, size: size * 0.26, color: Colors.white),
-            SizedBox(height: size * 0.06),
-            Text(
-              style.label,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0,
-                    fontSize: size < 240 ? 24 : null,
+      onTapUp: disabled
+          ? null
+          : (_) {
+              _stopPressAnimation();
+              widget.controller.releaseMic();
+            },
+      onTapCancel: disabled
+          ? null
+          : () {
+              _stopPressAnimation();
+              widget.controller.releaseMic();
+            },
+      child: AnimatedScale(
+        scale: _pressed ? 0.92 : 1,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOutBack,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          width: 300,
+          height: 300,
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: style.glow,
+                blurRadius:
+                    widget.controller.state == TalkState.transmitting ? 64 : 28,
+                spreadRadius:
+                    widget.controller.state == TalkState.transmitting ? 10 : 2,
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 120),
+                  child: Image.asset(
+                    _pressed ? _activeAsset : _idleAsset,
+                    key: ValueKey(_pressed ? _activeAsset : _idleAsset),
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
                   ),
-            ),
-          ],
+                ),
+              ),
+              if (_pressed)
+                Positioned(
+                  top: -26,
+                  left: 54,
+                  width: 120,
+                  height: 120,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 120),
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        alignment: Alignment.center,
+                        children: [
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      );
+                    },
+                    child: Image.asset(
+                      _signalAssets[_signalIndex],
+                      key: ValueKey(_signalAssets[_signalIndex]),
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                ),
+              Positioned(
+                top: 85,
+                left: 105,
+                right: 110,
+                child: _WalkieScreenText(
+                  label: style.label,
+                  targetName: widget.targetName,
+                  color: style.textColor,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2686,59 +3202,91 @@ class PushToTalkButton extends StatelessWidget {
       case TalkState.transmitting:
         return const _PttButtonStyle(
           label: 'TRANSMITTING',
-          icon: Icons.mic_rounded,
-          color: Color(0xFF148F46),
-          border: Color(0xFF70F0A4),
           glow: Color(0xAA38E07B),
         );
       case TalkState.busy:
         return _PttButtonStyle(
-          label: remoteTalking ? 'LISTENING' : 'LINE BUSY',
-          icon: remoteTalking ? Icons.volume_up_rounded : Icons.block_rounded,
-          color: const Color(0xFF8D1D2B),
-          border: const Color(0xFFFF6B78),
+          label: remoteTalking ? 'RECEIVING' : 'LINE BUSY',
           glow: const Color(0x77FF4D5E),
         );
       case TalkState.requesting:
         return const _PttButtonStyle(
           label: 'REQUESTING',
-          icon: Icons.hourglass_top_rounded,
-          color: Color(0xFF444B56),
-          border: Color(0xFF7C8797),
-          glow: Color(0x557C8797),
+          glow: Color(0x88F3E879),
         );
       case TalkState.disconnected:
         return const _PttButtonStyle(
           label: 'SERVER OFFLINE',
-          icon: Icons.wifi_off_rounded,
-          color: Color(0xFF30343B),
-          border: Color(0xFF565D68),
-          glow: Color(0x33565D68),
+          glow: Color(0x55F3E879),
         );
       case TalkState.idle:
         return const _PttButtonStyle(
           label: 'PUSH TO TALK',
-          icon: Icons.mic_none_rounded,
-          color: Color(0xFF3B4048),
-          border: Color(0xFF626A76),
-          glow: Color(0x44626A76),
+          glow: Color(0x55F3E879),
         );
     }
+  }
+}
+
+class _WalkieScreenText extends StatelessWidget {
+  const _WalkieScreenText({
+    required this.label,
+    required this.targetName,
+    required this.color,
+  });
+
+  final String label;
+  final String targetName;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: SizedBox(
+        width: 110,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0,
+                    fontSize: 15,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              targetName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0,
+                    fontSize: 10,
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
 class _PttButtonStyle {
   const _PttButtonStyle({
     required this.label,
-    required this.icon,
-    required this.color,
-    required this.border,
     required this.glow,
   });
 
   final String label;
-  final IconData icon;
-  final Color color;
-  final Color border;
   final Color glow;
+  Color get textColor => const Color(0xFF1A2500);
 }

@@ -124,6 +124,40 @@ on public.contacts for delete
 to authenticated
 using (auth.uid() = user_id or auth.uid() = contact_id);
 
+create or replace function public.send_contact_request(target_user_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_request_id uuid;
+begin
+  if target_user_id = auth.uid() then
+    raise exception 'you cannot add yourself';
+  end if;
+
+  if exists (
+    select 1
+    from public.contacts
+    where (user_id = auth.uid() and contact_id = target_user_id)
+       or (user_id = target_user_id and contact_id = auth.uid())
+  ) then
+    raise exception 'user is already your contact';
+  end if;
+
+  delete from public.contact_requests
+  where (sender_id = auth.uid() and receiver_id = target_user_id)
+     or (sender_id = target_user_id and receiver_id = auth.uid());
+
+  insert into public.contact_requests (sender_id, receiver_id, status)
+  values (auth.uid(), target_user_id, 'pending')
+  returning id into new_request_id;
+
+  return new_request_id;
+end;
+$$;
+
 create or replace function public.is_group_member(target_group_id uuid, target_user_id uuid)
 returns boolean
 language sql
@@ -269,6 +303,14 @@ begin
   delete from public.contacts
   where (user_id = auth.uid() and contact_id = other_user_id)
      or (user_id = other_user_id and contact_id = auth.uid());
+
+  delete from public.contact_requests
+  where (sender_id = auth.uid() and receiver_id = other_user_id)
+     or (sender_id = other_user_id and receiver_id = auth.uid());
+
+  delete from public.pokes
+  where (sender_id = auth.uid() and receiver_id = other_user_id)
+     or (sender_id = other_user_id and receiver_id = auth.uid());
 end;
 $$;
 
@@ -387,6 +429,7 @@ end;
 $$;
 
 grant execute on function public.approve_contact_request(uuid) to authenticated;
+grant execute on function public.send_contact_request(uuid) to authenticated;
 grant execute on function public.delete_contact(uuid) to authenticated;
 grant execute on function public.create_group(text) to authenticated;
 grant execute on function public.add_group_member(uuid, text) to authenticated;

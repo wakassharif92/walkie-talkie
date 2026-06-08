@@ -66,6 +66,11 @@ flutter:
   assets:
     - assets/tray/walkie_tray.png
     - assets/tray/walkie_tray.ico
+    - lib/assets/walkie_talkie_icon.png
+    - lib/assets/active_walkie_talkie_icon.png
+    - lib/assets/first_signal.png
+    - lib/assets/second_signal.png
+    - lib/assets/third_signal.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
