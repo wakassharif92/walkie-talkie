@@ -3156,28 +3156,13 @@ class _PushToTalkButtonState extends State<PushToTalkButton> {
               ),
               if (_pressed)
                 Positioned(
-                  top: -26,
-                  left: 54,
-                  width: 120,
-                  height: 120,
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 120),
-                    layoutBuilder: (currentChild, previousChildren) {
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.center,
-                        children: [
-                          ...previousChildren,
-                          if (currentChild != null) currentChild,
-                        ],
-                      );
-                    },
-                    child: Image.asset(
-                      _signalAssets[_signalIndex],
-                      key: ValueKey(_signalAssets[_signalIndex]),
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.high,
-                    ),
+                  top: -46,
+                  left: 46,
+                  width: 142,
+                  height: 150,
+                  child: _SignalBurst(
+                    activeLevel: _signalIndex + 1,
+                    signalAssets: _signalAssets,
                   ),
                 ),
               Positioned(
@@ -3228,6 +3213,74 @@ class _PushToTalkButtonState extends State<PushToTalkButton> {
   }
 }
 
+class _SignalBurst extends StatelessWidget {
+  const _SignalBurst({
+    required this.activeLevel,
+    required this.signalAssets,
+  });
+
+  final int activeLevel;
+  final List<String> signalAssets;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _SignalRow(
+          asset: signalAssets[1],
+          visible: activeLevel >= 2,
+          left: 30,
+          top: 38,
+          size: 70,
+        ),
+        _SignalRow(
+          asset: signalAssets[2],
+          visible: activeLevel >= 3,
+          left: 24,
+          top: 22,
+          size: 80,
+        ),
+      ],
+    );
+  }
+}
+
+class _SignalRow extends StatelessWidget {
+  const _SignalRow({
+    required this.asset,
+    required this.visible,
+    required this.left,
+    required this.top,
+    required this.size,
+  });
+
+  final String asset;
+  final bool visible;
+  final double left;
+  final double top;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: left,
+      top: top,
+      width: size,
+      height: size,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: const Duration(milliseconds: 120),
+        child: Image.asset(
+          asset,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+        ),
+      ),
+    );
+  }
+}
+
 class _WalkieScreenText extends StatelessWidget {
   const _WalkieScreenText({
     required this.label,
@@ -3257,7 +3310,7 @@ class _WalkieScreenText extends StatelessWidget {
                     color: color,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0,
-                    fontSize: 15,
+                    fontSize: 12,
                   ),
             ),
             const SizedBox(height: 2),
